@@ -237,7 +237,8 @@ export default function Billing() {
             { label: 'Status', render: (r: any) => <Status value={r.status} /> },
             { label: 'Invoices', num: true, render: (r: any) => number(r.invoices) },
             { label: 'Total', num: true, render: (r: any) => money(r.total) },
-            { label: 'Matched rehearsal', render: (r: any) => (r.summary?.matchedRehearsal === undefined ? '—' : r.summary.matchedRehearsal ? 'Yes' : 'No') },
+            // A chaos run bills only its share of the work, so the race is judged as a whole.
+            { label: 'Matched rehearsal', render: (r: any) => (r.kind === 'chaos' ? 'Judged together' : r.summary?.matchedRehearsal === undefined ? '—' : r.summary.matchedRehearsal ? 'Yes' : 'No') },
           ]}
           rows={(runs.data ?? []).filter((r: any) => r.invoices > 0 || r.kind === 'manual').slice(0, 10)}
           empty={<Empty title="No runs yet">Your first billing run appears here.</Empty>}
