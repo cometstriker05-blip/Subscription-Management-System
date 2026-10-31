@@ -24,9 +24,7 @@ npm install
 npm run demo:reset
 ```
 
-Open http://localhost:8080 and use a role button on the sign-in page. `npm run demo` starts without resetting the data. `npm run dev` runs with hot reload on http://localhost:5173.
-
-> **In OneDrive?** Keep `node_modules` out of the synced folder. This copy uses a junction to `~/.keel/node_modules`. `npm install` replaces that junction with a real folder, so move it back afterwards.
+The first start takes about three minutes while it builds the app and loads the demo company. Then open http://localhost:8080 and use a role button on the sign-in page. `npm run demo` starts without resetting the data. `npm run dev` runs with hot reload on http://localhost:5173.
 
 Optional settings are in [.env.example](.env.example). Gemini and SMTP are off by default, and every feature has a path that works without them.
 
