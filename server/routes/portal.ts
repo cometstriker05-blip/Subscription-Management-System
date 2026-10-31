@@ -7,7 +7,7 @@ import { billNow, previewNext } from '../services/billing.ts';
 import { appState, audit, conflict, notFound } from '../services/core.ts';
 import * as subs from '../services/subscriptions.ts';
 import { invoiceDetail, recordPayment } from './operations.ts';
-import { actorOf, body, customerOnly, idParam, type Env } from './helpers.ts';
+import { actorOf, body, customerOnly, dbId, GSTIN, idParam, note, phone, quantity, text, type Env } from './helpers.ts';
 
 export const portal = new Hono<Env>();
 portal.use('*', customerOnly);
@@ -59,7 +59,7 @@ portal.get('/plans', async (c) => {
 });
 
 portal.post('/subscribe', async (c) => {
-  const input = await body(c, z.object({ planId: z.number().int(), quantity: z.number().int().min(1) }));
+  const input = await body(c, z.object({ planId: dbId, quantity }));
   const actor = actorOf(c);
   const { today } = await appState();
   const plan = await one(`SELECT product_id FROM plans WHERE id = $1`, [input.planId]);
@@ -97,7 +97,7 @@ portal.get('/subscriptions/:id/addons/:productId/preview', async (c) => {
 
 portal.post('/subscriptions/:id/addons', async (c) => {
   const id = await ownedSubscription(c);
-  const { productId, enable } = await body(c, z.object({ productId: z.number().int(), enable: z.boolean() }));
+  const { productId, enable } = await body(c, z.object({ productId: dbId, enable: z.boolean() }));
   return c.json(await subs.setAddon(id, productId, enable, actorOf(c)));
 });
 
@@ -107,7 +107,7 @@ portal.post('/subscriptions/:id/renew', async (c) => c.json(await subs.renew(awa
 
 portal.post('/subscriptions/:id/close', async (c) => {
   const id = await ownedSubscription(c);
-  const { reason } = await body(c, z.object({ reason: z.string().trim().min(2, 'Tell us why').default('Closed from the portal') }));
+  const { reason } = await body(c, z.object({ reason: z.string().trim().min(2, 'Tell us why').max(300).default('Closed from the portal') }));
   await subs.transition(id, 'closed', actorOf(c), { reason });
   return c.json({ ok: true });
 });
@@ -148,13 +148,13 @@ portal.post('/invoices/:id/pay', async (c) => {
 
 portal.put('/profile', async (c) => {
   const v = await body(c, z.object({
-    name: z.string().trim().min(2, 'Enter the company name'),
-    phone: z.string().nullish(),
-    gstin: z.string().trim().regex(/^\d{2}[A-Z]{5}\d{4}[A-Z]\d[A-Z][A-Z0-9]$/, 'That GSTIN does not look right').nullish().or(z.literal('').transform(() => null)),
-    stateCode: z.string().nullish(),
-    stateName: z.string().nullish(),
-    city: z.string().nullish(),
-    address: z.string().nullish(),
+    name: text(160, 'Enter the company name'),
+    phone: phone.nullish().or(z.literal('').transform(() => null)),
+    gstin: z.string().trim().regex(GSTIN, 'That GSTIN does not look right').nullish().or(z.literal('').transform(() => null)),
+    stateCode: z.string().regex(/^\d{2}$/, 'Choose a state').nullish().or(z.literal('').transform(() => null)),
+    stateName: z.string().max(60).nullish(),
+    city: note(80).nullish(),
+    address: note(300).nullish(),
   }));
   await q(`UPDATE customers SET name=$2, phone=$3, gstin=$4, state_code=$5, state_name=$6, city=$7, address=$8 WHERE id=$1`,
     [customerIdOf(c), v.name, v.phone ?? null, v.gstin ?? null, v.stateCode ?? null, v.stateName ?? null, v.city ?? null, v.address ?? null]);

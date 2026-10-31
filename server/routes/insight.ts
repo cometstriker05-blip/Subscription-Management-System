@@ -5,12 +5,12 @@ import { q } from '../db/pool.ts';
 import { addMonths, monthStart } from '../engine/index.ts';
 import { askKeel, monthBrief } from '../services/ai.ts';
 import { cached } from '../services/cache.ts';
-import { appState, audit, conflict, Filters, listPage, paging } from '../services/core.ts';
+import { appState, audit, conflict, Filters, invalid, listPage, paging } from '../services/core.ts';
 import { advanceClock, nextBillingDay, type FeedEvent } from '../services/daily.ts';
 import { attemptDoubleBill, chaosRun, replayInvoices, runChecks } from '../services/integrity.ts';
 import { assignLine, confirmLine, explainLine, ignoreLine, ingestStatement, loadStatement, sampleStatement } from '../services/reconcile.ts';
 import { monthlySeries, monthRange, overview, planBreakdown, revenueSummary, tideChart, topOverdue } from '../services/reports.ts';
-import { actorOf, adminOnly, body, date, idParam, staffOnly, type Env } from './helpers.ts';
+import { actorOf, adminOnly, body, date, dbId, idParam, staffOnly, type Env } from './helpers.ts';
 
 export const insight = new Hono<Env>();
 insight.use('*', staffOnly);
@@ -177,18 +177,20 @@ insight.post('/reconcile/upload', async (c) => {
   const form = await c.req.parseBody();
   const file = form.file;
   if (!(file instanceof File)) throw conflict('Attach a statement file');
-  if (file.size > 10 * 1024 * 1024) throw conflict('Statements up to 10 MB, please');
+  if (file.size === 0) throw invalid('That file is empty');
+  if (file.size > 10 * 1024 * 1024) throw invalid('Statements up to 10 MB, please');
+  if (!/\.(csv|txt|pdf|png|jpe?g|webp)$/i.test(file.name)) throw invalid('Upload a CSV, PDF or photo of the statement');
   const content = Buffer.from(await file.arrayBuffer());
   return c.json(await ingestStatement({ filename: file.name, mimeType: file.type || 'text/csv', content, actor: actorOf(c) }), 201);
 });
 
 insight.post('/reconcile/lines/:id/confirm', async (c) => {
-  const { candidate } = await body(c, z.object({ candidate: z.number().int().min(0).default(0) }));
+  const { candidate } = await body(c, z.object({ candidate: z.number().int().min(0).max(3).default(0) }));
   return c.json(await confirmLine(idParam(c), candidate, actorOf(c)));
 });
 
 insight.post('/reconcile/lines/:id/assign', async (c) => {
-  const { invoiceId } = await body(c, z.object({ invoiceId: z.number().int() }));
+  const { invoiceId } = await body(c, z.object({ invoiceId: dbId }));
   return c.json(await assignLine(idParam(c), invoiceId, actorOf(c)));
 });
 

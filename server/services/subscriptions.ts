@@ -120,11 +120,12 @@ export async function createSubscription(draft: SubscriptionDraft, actor: Actor)
 
     const lines = await resolveLines(client, plan, lineDrafts);
     assertPlanOffer(plan, draft.startDate, lines);
+    const term = draft.paymentTermId ?? customer.payment_term_id ?? 1;
+    if (!(await one(`SELECT 1 AS ok FROM payment_terms WHERE id = $1`, [term], client))) throw invalid('Choose valid payment terms', { paymentTermId: 'Choose valid payment terms' });
 
     const seq = await one(`SELECT nextval('subscription_number_seq') AS n`, [], client);
     const number = `SUB-${String(seq!.n).padStart(5, '0')}`;
     const expiry = draft.expiryDate ?? addMonths(draft.startDate, plan.term_months);
-    const term = draft.paymentTermId ?? customer.payment_term_id ?? 1;
 
     const sub = await one(
       `INSERT INTO subscriptions (number, customer_id, plan_id, status, start_date, expiry_date, billing_anchor, next_billing_date,

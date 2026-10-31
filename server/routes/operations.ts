@@ -8,17 +8,17 @@ import { appState, audit, conflict, Filters, invalid, listPage, notFound, paging
 import { DUNNING_STEPS } from '../services/daily.ts';
 import { sendMail } from '../services/mail.ts';
 import * as subs from '../services/subscriptions.ts';
-import { actorOf, body, date, idParam, staffOnly, type Env } from './helpers.ts';
+import { actorOf, body, date, dbId, idParam, money, note, quantity, staffOnly, type Env } from './helpers.ts';
 
 export const ops = new Hono<Env>();
 ops.use('*', staffOnly);
 
 const lineSchema = z.object({
-  productId: z.number().int(),
-  variantId: z.number().int().nullish(),
-  quantity: z.number().int().min(1, 'Quantity must be at least 1'),
-  unitPrice: z.number().int().min(0).nullish(),
-  description: z.string().optional(),
+  productId: dbId,
+  variantId: dbId.nullish(),
+  quantity,
+  unitPrice: money.nullish(),
+  description: note(200).optional(),
 });
 
 ops.get('/subscriptions', async (c) => {
@@ -53,15 +53,15 @@ ops.get('/subscriptions/board', async (c) => {
 
 ops.post('/subscriptions', async (c) => {
   const input = await body(c, z.object({
-    customerId: z.number().int(),
-    planId: z.number().int(),
-    templateId: z.number().int().nullish(),
+    customerId: dbId,
+    planId: dbId,
+    templateId: dbId.nullish(),
     startDate: date,
     expiryDate: date.nullish(),
-    paymentTermId: z.number().int().nullish(),
-    notes: z.string().nullish(),
-    lines: z.array(lineSchema).optional(),
-  }));
+    paymentTermId: dbId.nullish(),
+    notes: note().nullish(),
+    lines: z.array(lineSchema).max(50, 'Keep it to 50 lines').optional(),
+  }).refine((s) => !s.expiryDate || s.expiryDate > s.startDate, { message: 'The expiry date must come after the start date', path: ['expiryDate'] }));
   return c.json(await subs.createSubscription(input, actorOf(c)), 201);
 });
 
@@ -90,13 +90,13 @@ ops.get('/subscriptions/:id', async (c) => {
 });
 
 ops.put('/subscriptions/:id/lines', async (c) => {
-  const { lines } = await body(c, z.object({ lines: z.array(lineSchema).min(1, 'Keep at least one line') }));
+  const { lines } = await body(c, z.object({ lines: z.array(lineSchema).min(1, 'Keep at least one line').max(50, 'Keep it to 50 lines') }));
   await subs.updateLines(idParam(c), lines, actorOf(c));
   return c.json({ ok: true });
 });
 
 ops.post('/subscriptions/:id/transition', async (c) => {
-  const { to, reason } = await body(c, z.object({ to: z.enum(['draft', 'quotation', 'confirmed', 'active', 'closed']), reason: z.string().optional() }));
+  const { to, reason } = await body(c, z.object({ to: z.enum(['draft', 'quotation', 'confirmed', 'active', 'closed']), reason: note(300).optional() }));
   await subs.transition(idParam(c), to, actorOf(c), { reason });
   return c.json({ ok: true });
 });
@@ -106,7 +106,7 @@ ops.post('/subscriptions/:id/resume', async (c) => { await subs.resume(idParam(c
 ops.post('/subscriptions/:id/renew', async (c) => c.json(await subs.renew(idParam(c), actorOf(c))));
 
 ops.post('/subscriptions/:id/discounts', async (c) => {
-  const { code } = await body(c, z.object({ code: z.string().min(1, 'Enter a code') }));
+  const { code } = await body(c, z.object({ code: z.string().trim().min(1, 'Enter a code').max(30, 'That code is too long') }));
   await subs.attachDiscount(idParam(c), code, actorOf(c));
   return c.json({ ok: true });
 });
@@ -117,7 +117,7 @@ ops.delete('/subscriptions/:id/discounts/:discountId', async (c) => {
 });
 
 ops.post('/subscriptions/:id/addons', async (c) => {
-  const { productId, enable } = await body(c, z.object({ productId: z.number().int(), enable: z.boolean() }));
+  const { productId, enable } = await body(c, z.object({ productId: dbId, enable: z.boolean() }));
   return c.json(await subs.setAddon(idParam(c), productId, enable, actorOf(c)));
 });
 
@@ -166,7 +166,7 @@ export async function invoiceDetail(id: number) {
 ops.get('/invoices/:id', async (c) => c.json(await invoiceDetail(idParam(c))));
 
 ops.post('/invoices/confirm-all', async (c) => {
-  const { runId } = await body(c, z.object({ runId: z.number().int().optional() }));
+  const { runId } = await body(c, z.object({ runId: dbId.optional() }));
   return c.json({ confirmed: await confirmAllDrafts(actorOf(c).name, { runId }) });
 });
 
@@ -177,7 +177,7 @@ ops.post('/invoices/:id/confirm', async (c) => {
 });
 
 ops.post('/invoices/:id/cancel', async (c) => {
-  const input = await body(c, z.object({ mode: z.enum(['rebill', 'waive']), reason: z.string().trim().min(3, 'Say why you are cancelling') }));
+  const input = await body(c, z.object({ mode: z.enum(['rebill', 'waive']), reason: z.string().trim().min(3, 'Say why you are cancelling').max(300) }));
   await cancelInvoice(idParam(c), input.mode, input.reason, actorOf(c).name);
   return c.json({ ok: true });
 });
@@ -245,12 +245,12 @@ export async function recordPayment(input: { invoiceId: number; amount: number; 
 
 ops.post('/payments', async (c) => {
   const input = await body(c, z.object({
-    invoiceId: z.number().int(),
-    amount: z.number().int().positive('Enter an amount above zero'),
+    invoiceId: dbId,
+    amount: money.positive('Enter an amount above zero'),
     method: z.enum(METHODS),
     paidOn: date,
-    note: z.string().nullish(),
-    reference: z.string().nullish(),
+    note: note(300).nullish(),
+    reference: note(80).nullish(),
   }));
   const { today } = await appState();
   if (input.paidOn > today) throw invalid('A payment cannot be dated in the future', { paidOn: `Today is ${today}` });

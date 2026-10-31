@@ -436,6 +436,73 @@ describe('Contracts that end mid-period', () => {
   });
 });
 
+describe('Input validation', () => {
+  const huge = 99999999999999;
+  const long = 'x'.repeat(5000);
+  const today = '2026-11-01';
+
+  it('refuses bad filters with a clear answer, never a server error', async () => {
+    const paths = [
+      '/invoices?from=garbage', '/invoices?to=2026-13-45', '/invoices?customerId=abc', '/invoices?status=active', '/invoices?runId=x',
+      '/subscriptions?status=paid', '/subscriptions?planId=abc', '/subscriptions?customerId=1;drop', '/payments?method=bitcoin',
+      '/payments?from=x', '/customers?segment=zzz', '/renewals?days=abc', '/reports/revenue?from=x&to=y', '/reports/revenue?planId=abc',
+      '/reports/export?from=bad', '/billing/rehearse?date=nope', '/billing/rehearse?date=2026-02-31', '/integrity/replay?limit=abc',
+    ];
+    for (const path of paths) expect([path, (await admin.get(`/api${path}`)).status]).toEqual([path, 422]);
+    for (const path of ['/invoices/abc', '/invoices/0', '/invoices/99999999999999999999', '/customers/-1', '/subscriptions/1.5']) {
+      expect([path, (await admin.get(`/api${path}`)).status]).toEqual([path, 400]);
+    }
+  });
+
+  it('refuses dates that do not exist, and dates in the wrong order', async () => {
+    const start = await staff.post('/api/subscriptions', { customerId: 1, planId: 1, startDate: '2026-02-31' });
+    expect(start.status).toBe(422);
+    expect(start.data.fields.startDate).toContain('real date');
+    expect((await staff.post('/api/subscriptions', { customerId: 1, planId: 1, startDate: today, expiryDate: '2026-01-01' })).data.fields.expiryDate).toContain('after the start');
+    expect((await admin.post('/api/clock/advance', { to: '2026-02-31' })).status).toBe(422);
+    expect((await admin.post('/api/discounts', { code: 'BACKWARDS', name: 'Backwards', kind: 'percent', value: 100, scope: 'subscription', validFrom: '2026-12-01', validUntil: '2026-01-01' })).status).toBe(422);
+  });
+
+  it('refuses amounts and lengths outside sensible limits', async () => {
+    const bad: [string, unknown][] = [
+      ['/api/subscriptions', { customerId: 1, planId: 1, startDate: today, lines: [{ productId: 1, quantity: huge }] }],
+      ['/api/subscriptions', { customerId: 1, planId: 1, startDate: today, lines: [{ productId: 1, quantity: 2, unitPrice: huge }] }],
+      ['/api/payments', { invoiceId: 1, amount: huge, method: 'upi', paidOn: '2026-10-01' }],
+      ['/api/products', { name: long, type: 'software', salesPrice: 1, costPrice: 0 }],
+      ['/api/products', { name: 'Negative', type: 'software', salesPrice: -5, costPrice: 0 }],
+      ['/api/products', { name: 'Huge extra', type: 'software', salesPrice: 5, costPrice: 0, variants: [{ attribute: 'a', value: 'b', priceExtra: huge }] }],
+      ['/api/customers', { name: long, email: 'a@b.co' }],
+      ['/api/customers', { name: 'Bad phone', email: 'a@b.co', phone: 'call me' }],
+      ['/api/discounts', { code: 'has spaces', name: 'x y', kind: 'percent', value: 100, scope: 'subscription' }],
+      ['/api/ask', { question: long }],
+    ];
+    for (const [path, payload] of bad) expect([path, (await admin.post(path, payload)).status]).toEqual([path, 422]);
+  });
+
+  it('refuses references to things that do not exist', async () => {
+    const bad: [string, unknown][] = [
+      ['/api/subscriptions', { customerId: 1, planId: 1, startDate: today, paymentTermId: 9999 }],
+      ['/api/customers', { name: 'Bad term', email: 'a@b.co', paymentTermId: 99999 }],
+      ['/api/discounts', { code: 'GHOST', name: 'Ghost', kind: 'percent', value: 100, scope: 'products', productIds: [99999] }],
+      ['/api/plans', { name: 'Ghost', productId: 99999, price: 100, billingUnit: 'monthly', minQuantity: 1, autoClose: false, closable: true, pausable: true, renewable: true, termMonths: 12 }],
+    ];
+    for (const [path, payload] of bad) expect([path, (await admin.post(path, payload)).status]).toEqual([path, 422]);
+  });
+
+  it('asks in plain words when a required amount is left empty', async () => {
+    const res = await admin.post('/api/products', { name: 'No price', type: 'software', salesPrice: null, costPrice: 0 });
+    expect(res.status).toBe(422);
+    expect(res.data.fields.salesPrice).toBe('Enter an amount');
+  });
+
+  it('refuses malformed and oversized requests', async () => {
+    const broken = await app.request('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'not json' });
+    expect(broken.status).toBe(400);
+    const big = await admin.post('/api/ask', { question: 'x'.repeat(300 * 1024) });
+    expect(big.status).toBe(413);
+  });
+});
+
 describe('Reports', () => {
   it('answers the finance lead, with figures that tie to the ledger', async () => {
     const res = await staff.get('/api/reports/revenue?preset=year');

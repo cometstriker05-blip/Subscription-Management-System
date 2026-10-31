@@ -42,7 +42,8 @@ export function addDays(iso: string, n: number) {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 }
 
-export const rupeesToPaise = (value: string | number) => Math.round(Number(value) * 100);
+/** An empty box becomes NaN, which the server refuses with "Enter an amount". */
+export const rupeesToPaise = (value: string | number) => (value === '' ? Number.NaN : Math.round(Number(value) * 100));
 export const paiseToRupees = (paise: number | null | undefined) => (paise == null ? '' : String(paise / 100));
 
 export const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`;

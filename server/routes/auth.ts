@@ -34,18 +34,21 @@ function recordFailure(key: string) {
   failures.set(key, { count: (entry && entry.until > Date.now() ? entry.count : 0) + 1, until: Date.now() + 60_000 });
 }
 
-const passwordField = z.string().superRefine((value, ctx) => {
+const emailField = z.string({ required_error: 'Enter your email' }).trim().max(254, 'That email is too long').email('Use a valid email address');
+
+// scrypt is deliberately slow, so very long passwords are refused before hashing.
+const passwordField = z.string({ required_error: 'Enter a password' }).max(128, 'Keep it under 128 characters').superRefine((value, ctx) => {
   const problem = passwordProblems(value)[0];
   if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
 });
 
 const signupSchema = z.object({
-  name: z.string().trim().min(2, 'Tell us your name'),
-  company: z.string().trim().min(2, 'Tell us your company name'),
-  email: z.string().trim().email('Use a valid email address'),
+  name: z.string({ required_error: 'Tell us your name' }).trim().min(2, 'Tell us your name').max(120),
+  company: z.string({ required_error: 'Tell us your company name' }).trim().min(2, 'Tell us your company name').max(160),
+  email: emailField,
   password: passwordField,
-  stateCode: z.string().length(2).optional(),
-  stateName: z.string().optional(),
+  stateCode: z.string().regex(/^\d{2}$/, 'Choose a state').optional(),
+  stateName: z.string().max(60).optional(),
 });
 
 auth.post('/signup', async (c) => {
@@ -73,7 +76,7 @@ auth.post('/signup', async (c) => {
 });
 
 auth.post('/login', async (c) => {
-  const { email, password } = await body(c, z.object({ email: z.string().email('Use a valid email address'), password: z.string().min(1, 'Enter your password') }));
+  const { email, password } = await body(c, z.object({ email: emailField, password: z.string({ required_error: 'Enter your password' }).min(1, 'Enter your password').max(128) }));
   const key = email.toLowerCase();
   throttle(key);
   const user = await one(`SELECT id, password_hash, active, role FROM users WHERE email = $1`, [email]);
@@ -102,7 +105,7 @@ auth.get('/me', async (c) => {
 });
 
 auth.post('/forgot', async (c) => {
-  const { email } = await body(c, z.object({ email: z.string().email('Use a valid email address') }));
+  const { email } = await body(c, z.object({ email: emailField }));
   const user = await one(`SELECT id, name, email FROM users WHERE email = $1 AND active`, [email]);
   if (user) {
     const { today, company } = await appState();
@@ -121,7 +124,7 @@ auth.post('/forgot', async (c) => {
 });
 
 auth.post('/reset', async (c) => {
-  const { token, password } = await body(c, z.object({ token: z.string().min(10), password: passwordField }));
+  const { token, password } = await body(c, z.object({ token: z.string().min(10).max(100), password: passwordField }));
   await tx(async (client) => {
     const reset = await one(
       `SELECT user_id FROM password_resets WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() FOR UPDATE`,
@@ -156,8 +159,8 @@ team.get('/', adminOnly, async (c) => {
 // Only an admin can add staff. Public signup can only ever create a customer.
 team.post('/', adminOnly, async (c) => {
   const input = await body(c, z.object({
-    name: z.string().trim().min(2, 'Enter a name'),
-    email: z.string().trim().email('Use a valid email address'),
+    name: z.string({ required_error: 'Enter a name' }).trim().min(2, 'Enter a name').max(120),
+    email: emailField,
     password: passwordField,
   }));
   const taken = await one(`SELECT 1 AS ok FROM users WHERE email = $1`, [input.email]);

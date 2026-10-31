@@ -1,12 +1,13 @@
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { compress } from 'hono/compress';
 import { secureHeaders } from 'hono/secure-headers';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { auth, team } from './routes/auth.ts';
 import { catalog } from './routes/catalog.ts';
-import { loadActor, type Env } from './routes/helpers.ts';
+import { loadActor, validateQuery, type Env } from './routes/helpers.ts';
 import { insight } from './routes/insight.ts';
 import { ops } from './routes/operations.ts';
 import { portal } from './routes/portal.ts';
@@ -39,6 +40,13 @@ app.use('/api/*', async (c, next) => {
   if (unsafe) bumpDataVersion();
 });
 
+// Statements can be large; nothing else needs more than a small JSON body.
+app.use('/api/*', async (c, next) => {
+  const maxSize = c.req.path.endsWith('/reconcile/upload') ? 11 * 1024 * 1024 : 256 * 1024;
+  return bodyLimit({ maxSize, onError: () => { throw new AppError(413, 'That is too large to send', 'too_large'); } })(c, next);
+});
+
+app.use('/api/*', validateQuery);
 app.use('/api/*', loadActor);
 
 app.get('/api/health', (c) => c.json({ ok: true }));
@@ -57,6 +65,13 @@ app.onError((err, c) => {
   if (code?.startsWith('KE')) return c.json({ error: err.message, code }, 409);
   if (code === '23P01') return c.json({ error: 'That period is already billed', code }, 409);
   if (code === '23505') return c.json({ error: 'That already exists', code }, 409);
+  // A last line of defence. Validation should catch these first, but bad input must
+  // always come back as a clear refusal and never as a server error.
+  if (code === '23503') return c.json({ error: 'That refers to something that does not exist', code: 'invalid' }, 422);
+  if (code === '23514' || code === '23502') return c.json({ error: 'Those values do not fit together', code: 'invalid' }, 422);
+  if (code === '22P02' || code === '22007' || code === '22008' || code === '22003' || code === '22001') {
+    return c.json({ error: 'One of those values is not valid', code: 'invalid' }, 422);
+  }
   console.error(err);
   return c.json({ error: 'Something went wrong on our side', code: 'server_error' }, 500);
 });

@@ -2,20 +2,24 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { one, q, tx } from '../db/pool.ts';
 import { appState, audit, conflict, Filters, listPage, notFound, paging } from '../services/core.ts';
-import { actorOf, adminOnly, body, date, idParam, money, staffOnly, type Env } from './helpers.ts';
+import { actorOf, adminOnly, body, date, dbId, GSTIN, idParam, MAX_QUANTITY, money, note, phone, quantity, staffOnly, text, type Env } from './helpers.ts';
 
 export const catalog = new Hono<Env>();
 
 const productSchema = z.object({
-  name: z.string().trim().min(2, 'Name the product'),
+  name: text(120, 'Name the product'),
   type: z.enum(['software', 'service', 'addon', 'goods']),
   salesPrice: money,
   costPrice: money,
-  notes: z.string().nullish(),
-  taxCategory: z.string().default('software'),
-  sac: z.string().nullish(),
+  notes: note().nullish(),
+  taxCategory: z.string().trim().min(2, 'Enter a tax category').max(40).default('software'),
+  sac: z.string().trim().regex(/^\d{0,8}$/, 'SAC codes are digits only').nullish(),
   active: z.boolean().default(true),
-  variants: z.array(z.object({ attribute: z.string().min(1), value: z.string().min(1), priceExtra: z.number().int() })).default([]),
+  variants: z.array(z.object({
+    attribute: z.string().trim().min(1, 'Name the attribute').max(60),
+    value: z.string().trim().min(1, 'Enter a value').max(60),
+    priceExtra: money,
+  })).max(50, 'Keep it to 50 variants').default([]),
 });
 
 catalog.get('/products', staffOnly, async (c) => {
@@ -77,22 +81,22 @@ catalog.put('/products/:id', adminOnly, async (c) => {
 });
 
 const planSchema = z.object({
-  name: z.string().trim().min(2, 'Name the plan'),
-  productId: z.number().int().nullish(),
+  name: text(120, 'Name the plan'),
+  productId: dbId.nullish(),
   price: money,
   billingUnit: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
-  billingInterval: z.number().int().min(1).default(1),
-  minQuantity: z.number().int().min(1),
+  billingInterval: z.number().int().min(1).max(120).default(1),
+  minQuantity: quantity,
   availableFrom: date.nullish(),
   availableUntil: date.nullish(),
   autoClose: z.boolean(),
   closable: z.boolean(),
   pausable: z.boolean(),
   renewable: z.boolean(),
-  termMonths: z.number().int().min(1),
-  notes: z.string().nullish(),
+  termMonths: z.number({ invalid_type_error: 'Enter the contract length' }).int('Use whole months').min(1, 'At least 1 month').max(120, 'At most 120 months'),
+  notes: note().nullish(),
   active: z.boolean().default(true),
-  addons: z.array(z.object({ productId: z.number().int(), price: money })).default([]),
+  addons: z.array(z.object({ productId: dbId, price: money })).max(50).default([]),
 }).refine((p) => !p.availableFrom || !p.availableUntil || p.availableUntil >= p.availableFrom, { message: 'The end date comes before the start date', path: ['availableUntil'] });
 
 catalog.get('/plans', staffOnly, async (c) => {
@@ -147,15 +151,18 @@ catalog.put('/plans/:id', adminOnly, async (c) => {
 });
 
 const taxSchema = z.object({
-  name: z.string().trim().min(2, 'Name the rule'),
-  taxCategory: z.string().nullish(),
+  name: text(120, 'Name the rule'),
+  taxCategory: z.string().trim().max(40).nullish(),
   supply: z.enum(['intra', 'inter', 'export']).nullish(),
-  components: z.array(z.object({ label: z.string().min(1), rate: z.number().int().min(0).max(10000) })).min(1, 'Add at least one tax component'),
+  components: z.array(z.object({
+    label: z.string().trim().min(1, 'Name each component').max(20),
+    rate: z.number({ invalid_type_error: 'Enter a rate' }).int().min(0, 'A rate cannot be negative').max(10000, 'A rate cannot exceed 100%'),
+  })).min(1, 'Add at least one tax component').max(6),
   validFrom: date.nullish(),
   validUntil: date.nullish(),
-  priority: z.number().int().default(0),
+  priority: z.number().int().min(-1000).max(1000).default(0),
   active: z.boolean().default(true),
-});
+}).refine((t) => !t.validFrom || !t.validUntil || t.validUntil >= t.validFrom, { message: 'The end date comes before the start date', path: ['validUntil'] });
 
 catalog.get('/tax-rules', staffOnly, async (c) => c.json(await q(`SELECT * FROM tax_rules ORDER BY priority DESC, id`)));
 
@@ -181,21 +188,22 @@ catalog.put('/tax-rules/:id', adminOnly, async (c) => {
 });
 
 const discountSchema = z.object({
-  code: z.string().trim().min(2, 'Give it a code').transform((v) => v.toUpperCase()),
-  name: z.string().trim().min(2, 'Name the discount'),
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,30}$/, 'Use 2 to 30 letters or digits, with no spaces'),
+  name: text(120, 'Name the discount'),
   kind: z.enum(['fixed', 'percent']),
-  value: z.number().int().positive('Enter a value above zero'),
+  value: z.number({ invalid_type_error: 'Enter a value' }).int().positive('Enter a value above zero').max(10_000_000_000, 'That value is too large'),
   minPurchase: money.default(0),
-  minQuantity: z.number().int().min(0).default(0),
+  minQuantity: z.number().int().min(0, 'Enter zero or more').max(MAX_QUANTITY).default(0),
   validFrom: date.nullish(),
   validUntil: date.nullish(),
-  usageLimit: z.number().int().positive().nullish(),
+  usageLimit: z.number().int().positive('The limit must be above zero').max(10_000_000).nullish(),
   scope: z.enum(['subscription', 'products']),
-  productIds: z.array(z.number().int()).default([]),
+  productIds: z.array(dbId).max(200).default([]),
   autoApply: z.boolean().default(false),
   active: z.boolean().default(true),
 }).refine((d) => d.kind !== 'percent' || d.value <= 10000, { message: 'A percentage cannot exceed 100', path: ['value'] })
-  .refine((d) => d.scope !== 'products' || d.productIds.length > 0, { message: 'Pick at least one product', path: ['productIds'] });
+  .refine((d) => d.scope !== 'products' || d.productIds.length > 0, { message: 'Pick at least one product', path: ['productIds'] })
+  .refine((d) => !d.validFrom || !d.validUntil || d.validUntil >= d.validFrom, { message: 'The end date comes before the start date', path: ['validUntil'] });
 
 catalog.get('/discounts', staffOnly, async (c) => {
   const rows = await q(
@@ -261,11 +269,11 @@ catalog.get('/quote-templates', staffOnly, async (c) => {
 });
 
 const templateSchema = z.object({
-  name: z.string().trim().min(2, 'Name the template'),
-  planId: z.number().int(),
-  validityDays: z.number().int().min(1, 'Valid for at least a day'),
-  notes: z.string().nullish(),
-  lines: z.array(z.object({ productId: z.number().int(), variantId: z.number().int().nullish(), quantity: z.number().int().min(1), unitPrice: z.number().int().nullish() })).min(1, 'Add at least one line'),
+  name: text(120, 'Name the template'),
+  planId: dbId,
+  validityDays: z.number({ invalid_type_error: 'Enter a number of days' }).int().min(1, 'Valid for at least a day').max(365, 'At most a year'),
+  notes: note().nullish(),
+  lines: z.array(z.object({ productId: dbId, variantId: dbId.nullish(), quantity, unitPrice: money.nullish() })).min(1, 'Add at least one line').max(50),
 });
 
 catalog.post('/quote-templates', adminOnly, async (c) => {
@@ -282,17 +290,17 @@ catalog.post('/quote-templates', adminOnly, async (c) => {
 });
 
 const customerSchema = z.object({
-  name: z.string().trim().min(2, 'Enter the company name'),
-  email: z.string().trim().email('Use a valid email address'),
-  phone: z.string().nullish(),
-  gstin: z.string().trim().regex(/^\d{2}[A-Z]{5}\d{4}[A-Z]\d[A-Z][A-Z0-9]$/, 'That GSTIN does not look right').nullish().or(z.literal('').transform(() => null)),
-  stateCode: z.string().nullish(),
-  stateName: z.string().nullish(),
-  city: z.string().nullish(),
-  address: z.string().nullish(),
+  name: text(160, 'Enter the company name'),
+  email: z.string().trim().max(254).email('Use a valid email address'),
+  phone: phone.nullish().or(z.literal('').transform(() => null)),
+  gstin: z.string().trim().regex(GSTIN, 'That GSTIN does not look right').nullish().or(z.literal('').transform(() => null)),
+  stateCode: z.string().regex(/^\d{2}$/, 'Choose a state').nullish().or(z.literal('').transform(() => null)),
+  stateName: z.string().max(60).nullish(),
+  city: z.string().trim().max(80).nullish(),
+  address: z.string().trim().max(300).nullish(),
   country: z.string().length(2).default('IN'),
   segment: z.enum(['small', 'mid', 'enterprise']).default('small'),
-  paymentTermId: z.number().int().nullish(),
+  paymentTermId: dbId.nullish(),
 });
 
 catalog.get('/customers', staffOnly, async (c) => {
