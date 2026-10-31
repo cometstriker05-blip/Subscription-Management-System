@@ -1,0 +1,55 @@
+{
+  "name": "keel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Keel: the subscription backbone you can rehearse, prove and explain.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "demo": "npm run build && tsx scripts/demo.ts",
+    "demo:reset": "npm run build && tsx scripts/demo.ts --reset",
+    "dev:api": "tsx watch server/index.ts",
+    "dev:web": "vite",
+    "db:up": "tsx scripts/pg-local.ts",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:seed": "tsx scripts/seed-local.ts",
+    "build": "vite build && esbuild server/index.ts server/db/migrate.ts server/db/seed.ts --bundle --platform=node --format=esm --packages=external --outdir=dist-server --outbase=server --sourcemap",
+    "start": "node dist-server/index.js",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "bench": "tsx scripts/bench.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0",
+    "nodemailer": "^6.9.0",
+    "pg": "^8.13.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/schibsted-grotesk": "^5.0.0",
+    "@fontsource-variable/spline-sans-mono": "^5.0.0",
+    "@tanstack/react-query": "^5.59.0",
+    "@types/node": "^22.7.0",
+    "@types/nodemailer": "^6.4.0",
+    "@types/pg": "^8.11.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "embedded-postgres": "^17.5.0-beta.15",
+    "esbuild": "^0.25.0",
+    "lucide-react": "^0.460.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}
