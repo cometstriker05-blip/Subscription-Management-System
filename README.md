@@ -43,7 +43,7 @@ Optional settings are in [.env.example](.env.example). Gemini and SMTP are off b
 | Quotation template with validity days | Templates fill the plan and lines, and quotes expire on their own |
 | Subscription number, customer, plan, dates, terms, lines | Subscription page, with tax shown line by line through the X-ray |
 | Draft → Quotation → Confirmed → Active → Closed, visible to the team | Enforced state machine, a board, and a full history on each subscription |
-| Hundreds of invoices on billing day | Parallel workers with `FOR UPDATE SKIP LOCKED`. 2,739 invoices in about 8 seconds |
+| Hundreds of invoices on billing day | Parallel workers with `FOR UPDATE SKIP LOCKED`. 2,739 invoices in under 10 seconds |
 | Taxes from admin rules | Tax rules with CGST + SGST, IGST or zero-rated export. The place of supply comes from the customer's state |
 | Confirm, cancel, send, print; Draft → Confirmed → Paid | All on the invoice. Cancelling asks whether to bill the period again or write it off |
 | Nothing billed twice or skipped | Exclusion constraint, catch-up after downtime, and the Proof page |
@@ -52,7 +52,7 @@ Optional settings are in [.env.example](.env.example). Gemini and SMTP are off b
 | Payments: method, amount, date, note, against the right invoice | Part payments on different days, and overpayment is refused by the database |
 | See paid and outstanding, chase overdue | Collections, sorted by money at risk. Reminders go at 1, 7, 15 and 30 days |
 | Active subs, revenue, payments, overdue, with filters | Revenue page, with date, plan, size and state filters and CSV export |
-| Under two seconds with thousands of subscriptions | 10,242 subscriptions and 91,668 invoices, with 10 simultaneous users on the production build: slowest page p95 under 400 ms from cold and about 150 ms warm. Run `npm run bench` to reproduce it |
+| Under two seconds with thousands of subscriptions | 10,242 subscriptions and 91,668 invoices, with 10 simultaneous users on the production build: slowest page p95 about 400 ms from cold and about 150 ms warm. Run `npm run bench` to reproduce it |
 
 The brief's list of today's pains gets its own answers too:
 
@@ -89,7 +89,7 @@ server/db/         Schema, migrations, and a seed that goes through the real eng
 server/services/   Billing, subscriptions, daily run, reports, proof, bank matching, AI
 server/routes/     HTTP, with validation and role checks
 web/               React app and customer portal
-tests/             41 engine tests, 39 integration tests against real Postgres
+tests/             41 engine tests, 45 integration tests against real Postgres
 ```
 
 **The guarantees live in the database**, so a bug in application code still cannot break them:
@@ -118,7 +118,7 @@ npm run test:integration
 npm run bench -- http://localhost:8080 10
 ```
 
-The integration suite runs on a real Postgres and attacks the system on purpose: guessed ids, 8-character passwords, racing runs, crashing workers, rogue writers, overpayment by direct SQL, a tampered audit log, and a scheduler that died three months ago.
+The integration suite runs on a real Postgres and attacks the system on purpose: bad filters, impossible dates, oversized values, guessed ids, 8-character passwords, racing runs, crashing workers, rogue writers, overpayment by direct SQL, a tampered audit log, and a scheduler that died three months ago.
 
 ## Deploying to Google Cloud
 

@@ -18,7 +18,7 @@ Show **Bridge**. Point to the tide chart.
 
 ## Rehearse (60 seconds)
 
-Click the date at top right to open the **Time machine**, choose **Next billing day**, then **Go**. It stops on 1 Nov.
+Click the yellow date at top right to open the **Time machine**, choose **Next billing day**, then **Go**. It stops on 1 Nov.
 
 On **Billing day**, click **Rehearse billing day**.
 
@@ -36,7 +36,7 @@ Scroll to **Try to break it**. Click **Try to bill a period twice**.
 
 > "This skips all our code and goes straight at the database. Postgres refuses. It isn't an if-statement that someone can forget. Billing twice is impossible."
 
-Open **Proof** in the side menu.
+Open **Know**, then **Proof**.
 
 > "Most systems promise their books are right. Keel asks eleven questions of the live data, and each answer must be zero. The query is right there. Anyone can check."
 
@@ -86,7 +86,7 @@ Sign out, and use the **Customer** button. Open the subscription and switch on *
 
 **Is the data real?** It's simulated, but generated through the real engine, so every invoice can be audited and replayed like a live one.
 
-**Would it scale?** With 10 simultaneous users on 10,000 subscriptions and 90,000 invoices, the slowest page stayed under 400 ms at p95 from a cold start and around 150 ms warm. `npm run bench` reproduces it.
+**Would it scale?** With 10 simultaneous users on 10,000 subscriptions and 90,000 invoices, the slowest page stayed around 400 ms at p95 from a cold start and around 150 ms warm. `npm run bench` reproduces it.
 
 ## Before you go on stage
 
