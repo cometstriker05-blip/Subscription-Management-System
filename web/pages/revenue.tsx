@@ -63,7 +63,7 @@ export default function Revenue() {
 
       <div className="card mt-16 pad water">
         <div className="row between wrap">
-          <div className="row gap-6 strong"><Sparkles size={15} color="var(--magenta)" /> Month-end note</div>
+          <div className="row gap-6 strong"><Sparkles size={15} /> Month-end note</div>
           {me?.ai.enabled && !aiBrief.data && <Button size="small" onClick={() => setWantAi(true)} loading={aiBrief.isFetching}>{aiBrief.isFetching ? 'Gemini is writing' : 'Rewrite with Gemini'}</Button>}
         </div>
         {brief ? <p className="mt-4" style={{ maxWidth: '100ch' }}>{brief.text}</p> : <div className="skeleton mt-8" style={{ height: 40 }} />}

@@ -4,7 +4,7 @@ import {
   Mail, Package, Receipt, Repeat2, Search, ShieldCheck, Ship, Sparkles, Users, Waves,
 } from 'lucide-react';
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, latency, post, streamPost } from './lib/api';
 import { addDays, compact, date, shortDate } from './lib/format';
 import { Button, Dialog, Field, Loading, useGet, useToast } from './ui';
@@ -22,19 +22,23 @@ export const useMe = () => useQuery<Me>({ queryKey: ['me'], queryFn: () => api('
 
 export const KeelMark = ({ size = 26 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-    <rect width="32" height="32" rx="7" fill="#b4127a" />
-    <path d="M6 12h20l-4 9a4 4 0 0 1-3.6 2.4h-4.8A4 4 0 0 1 10 21z" fill="#fff" />
-    <path d="M16 5v7" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+    <rect width="32" height="32" fill="#c93a1b" />
+    <path d="M5 11h22l-4.4 11.5a2 2 0 0 1-1.9 1.3H11.3a2 2 0 0 1-1.9-1.3z" fill="#fff" />
+    <path d="M16 4v7" stroke="#fff" strokeWidth="2.6" />
   </svg>
 );
 
+// Two levels: the sections of the business on top, and that section's pages below.
 const NAV = [
   { group: 'Today', items: [['/', 'Bridge', LayoutDashboard], ['/billing', 'Billing day', Waves]] },
   { group: 'Sell', items: [['/subscriptions', 'Subscriptions', Repeat2], ['/customers', 'Customers', Users], ['/renewals', 'Renewals', CalendarClock]] },
-  { group: 'Bill and collect', items: [['/invoices', 'Invoices', FileText], ['/payments', 'Payments', Receipt], ['/reconcile', 'Bank matching', Landmark], ['/collections', 'Collections', Handshake]] },
+  { group: 'Collect', items: [['/invoices', 'Invoices', FileText], ['/payments', 'Payments', Receipt], ['/reconcile', 'Bank matching', Landmark], ['/collections', 'Collections', Handshake]] },
   { group: 'Know', items: [['/revenue', 'Revenue', BadgeIndianRupee], ['/integrity', 'Proof', ShieldCheck], ['/outbox', 'Outbox', Mail]] },
   { group: 'Set up', items: [['/catalog', 'Catalog', Package]] },
 ] as const;
+
+const isIn = (path: string, to: string) => (to === '/' ? path === '/' : path === to || path.startsWith(`${to}/`));
+const sectionFor = (path: string) => NAV.find((s) => s.items.some(([to]) => isIn(path, to))) ?? NAV[0];
 
 function Speed() {
   const ms = useSyncExternalStore(latency.subscribe, latency.get);
@@ -48,6 +52,17 @@ function GlobalSearch() {
   const [term, setTerm] = useState('');
   const navigate = useNavigate();
   const box = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const focus = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        field.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', focus);
+    return () => document.removeEventListener('keydown', focus);
+  }, []);
   useEffect(() => {
     const id = setTimeout(() => setTerm(text.trim()), 180);
     return () => clearTimeout(id);
@@ -61,7 +76,7 @@ function GlobalSearch() {
   return (
     <div className="search" ref={box}>
       <Search size={15} />
-      <input value={text} placeholder="Find a customer, subscription or invoice" aria-label="Search"
+      <input ref={field} value={text} placeholder="Search (Ctrl K)" aria-label="Find a customer, subscription or invoice" title="Find a customer, subscription or invoice"
         onChange={(e) => { setText(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} />
       {open && term.length >= 2 && results.data && (
         <div className="search-results">
@@ -205,7 +220,7 @@ function AskKeel({ onClose }: { onClose: () => void }) {
   return (
     <aside className="drawer" aria-label="Ask Keel">
       <div className="drawer-head">
-        <h2 className="row gap-6"><Sparkles size={16} color="var(--magenta)" /> Ask Keel</h2>
+        <h2 className="row gap-6"><Sparkles size={16} /> Ask Keel</h2>
         <Button variant="ghost" size="small" onClick={onClose}>Close</Button>
       </div>
       <div className="drawer-body">
@@ -259,47 +274,46 @@ export function AppShell() {
   const [machine, setMachine] = useState(false);
   const [ask, setAsk] = useState(false);
   const logout = useLogout();
+  const { pathname } = useLocation();
   if (!me?.user) return null;
   const simulated = me.clockMode === 'simulated';
+  const section = sectionFor(pathname);
   return (
     <div className="shell">
-      <nav className="rail" aria-label="Main">
-        <Link to="/" className="brand"><KeelMark /><div><strong>Keel</strong><small>for {me.company.name}</small></div></Link>
-        {NAV.map((section) => (
-          <div key={section.group}>
-            <div className="rail-group">{section.group}</div>
-            {section.items.map(([to, label, Icon]) => (
-              <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `item ${isActive ? 'active' : ''}`}>
-                <Icon size={16} /> {label}
-              </NavLink>
-            ))}
-          </div>
-        ))}
-        <div className="rail-foot">
-          <div className="row between">
-            <div><div className="who">{me.user.name}</div><div className="role">{me.user.role}</div></div>
-            <button className="btn ghost small" style={{ color: '#cfe0e9' }} onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={15} /></button>
+      <header className="helm no-print">
+        <div className="helm-top">
+          <Link to="/" className="brand" aria-label={`Keel for ${me.company.name}`}><KeelMark /><strong>Keel</strong></Link>
+          <nav className="helm-nav" aria-label="Sections">
+            {NAV.map((s) => <Link key={s.group} to={s.items[0][0]} className={s.group === section.group ? 'active' : ''} aria-current={s.group === section.group ? 'true' : undefined}>{s.group}</Link>)}
+          </nav>
+          <div className="helm-tools">
+            <GlobalSearch />
+            <Speed />
+            <button className="btn small btn-helm" onClick={() => setAsk(true)}><Sparkles size={14} /> Ask Keel</button>
+            {me.user.role === 'admin' && simulated ? (
+              <button className="clock" onClick={() => setMachine(true)} title="Open the time machine">
+                <Ship size={14} /> {date(me.today)} <span className="tag">Time machine</span>
+              </button>
+            ) : (
+              <span className="clock" style={{ cursor: 'default' }}>{date(me.today)}</span>
+            )}
+            <div className="helm-user">
+              <span>{me.user.name}</span>
+              <button className="btn ghost small" style={{ color: '#fff' }} onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={15} /></button>
+            </div>
           </div>
         </div>
-      </nav>
-      <div style={{ minWidth: 0 }}>
-        <header className="topbar no-print">
-          <GlobalSearch />
-          <div className="grow" />
-          <Speed />
-          <Button size="small" onClick={() => setAsk(true)}><Sparkles size={14} color="var(--magenta)" /> Ask Keel</Button>
-          {me.user.role === 'admin' && simulated ? (
-            <button className="clock" onClick={() => setMachine(true)} title="Open the time machine">
-              <Ship size={14} color="var(--magenta)" /> {date(me.today)} <span className="tag">Time machine</span>
-            </button>
-          ) : (
-            <span className="clock" style={{ cursor: 'default' }}>{date(me.today)}</span>
-          )}
-        </header>
-        <main className="main">
-          <Suspense fallback={<Loading height={320} />}><Outlet /></Suspense>
-        </main>
-      </div>
+        <nav className="subnav" aria-label={section.group}>
+          {section.items.map(([to, label, Icon]) => (
+            <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
+              <Icon size={15} /> {label}
+            </NavLink>
+          ))}
+        </nav>
+      </header>
+      <main className="main">
+        <Suspense fallback={<div style={{ paddingTop: 24 }}><Loading height={320} /></div>}><Outlet /></Suspense>
+      </main>
       {me.user.role === 'admin' && <TimeMachine open={machine} onClose={() => setMachine(false)} />}
       {ask && <AskKeel onClose={() => setAsk(false)} />}
     </div>
@@ -313,7 +327,7 @@ export function PortalShell() {
   return (
     <div>
       <header className="portal-top no-print">
-        <Link to="/portal" className="row"><KeelMark size={24} /><strong>{me.company.name}</strong><span className="muted small" style={{ color: '#9dbccb' }}>Customer portal</span></Link>
+        <Link to="/portal" className="brand"><KeelMark size={24} /><strong>{me.company.name}</strong></Link>
         <nav aria-label="Portal">
           <NavLink to="/portal" end>Overview</NavLink>
           <NavLink to="/portal/plans">Plans</NavLink>
@@ -325,7 +339,7 @@ export function PortalShell() {
         </div>
       </header>
       <main className="portal-main">
-        <Suspense fallback={<Loading height={320} />}><Outlet /></Suspense>
+        <Suspense fallback={<div style={{ paddingTop: 24 }}><Loading height={320} /></div>}><Outlet /></Suspense>
       </main>
     </div>
   );

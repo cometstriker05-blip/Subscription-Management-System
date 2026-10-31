@@ -96,14 +96,14 @@ export default function Billing() {
         <div className="row between wrap gap-20">
           <div>
             <div className="small muted">Step 1</div>
-            <h2 style={{ color: '#fff', fontSize: 19 }}>Rehearse billing</h2>
+            <h2>Rehearse billing</h2>
             <p className="muted small" style={{ maxWidth: '52ch' }}>Finds what is due on {date(asOf)}, computes every invoice, and checks each one for problems.</p>
           </div>
           <Button variant="primary" size="big" onClick={rehearse} loading={rehearsing}><Telescope size={18} /> {rehearsing ? 'Rehearsing' : plan ? 'Rehearse again' : 'Rehearse billing day'}</Button>
         </div>
 
         {plan && (
-          <div className="grid four mt-16" style={{ borderTop: '1px solid rgba(255,255,255,.15)', paddingTop: 14 }}>
+          <div className="grid four mt-16" style={{ borderTop: '2px solid var(--hull)', paddingTop: 14, gap: 16 }}>
             <div><div className="small muted">Invoices</div><div className="figure">{number(plan.invoices)}</div></div>
             <div><div className="small muted">Will be billed</div><div className="figure">{money(plan.total)}</div></div>
             <div><div className="small muted">Discounts applied</div><div className="figure">{money(plan.discount)}</div></div>
@@ -122,7 +122,7 @@ export default function Billing() {
           <div className="card">
             <div className="card-head">
               <h2>What the rehearsal found</h2>
-              <div className="row gap-6">
+              <div className="row wrap gap-6">
                 {(['all', 'blocker', 'warning', 'info'] as const).map((s) => (
                   <button key={s} className={`btn small ${severity === s ? 'dark' : ''}`} onClick={() => setSeverity(s)}>
                     {s === 'all' ? `All ${plan.findings.length}` : `${SEVERITY[s].label} ${plan.counts[s]}`}
@@ -195,7 +195,7 @@ export default function Billing() {
       {me?.user?.role === 'admin' && (
         <div className="card mt-16">
           <div className="card-head">
-            <div><h2 className="row gap-6"><ShieldAlert size={16} color="var(--magenta)" /> Try to break it</h2><div className="small muted">The brief says nothing may be billed twice or skipped. Don't take our word for it.</div></div>
+            <div><h2 className="row gap-6"><ShieldAlert size={18} /> Try to break it</h2><div className="small muted">The brief says nothing may be billed twice or skipped. Don't take our word for it.</div></div>
           </div>
           <div className="card-body grid two">
             <div className="col">

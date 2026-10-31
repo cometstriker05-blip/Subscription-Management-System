@@ -81,8 +81,8 @@ export function TideChart({ days, today, onPick }: { days: TideDay[]; today: str
 
           {todayIndex >= 0 && (
             <g>
-              <line x1={x(todayIndex) + step / 2} x2={x(todayIndex) + step / 2} y1={T - 8} y2={y(0) + 4} stroke="var(--magenta)" strokeWidth="2" />
-              <text x={x(todayIndex) + step / 2 + 6} y={T} fontSize="12" fontWeight="650" fill="var(--magenta)">Today</text>
+              <line x1={x(todayIndex) + step / 2} x2={x(todayIndex) + step / 2} y1={T - 8} y2={y(0) + 4} stroke="var(--oxide)" strokeWidth="3" />
+              <text x={x(todayIndex) + step / 2 + 7} y={T + 1} fontSize="17" fontWeight="800" fontFamily="var(--display)" letterSpacing="0.05em" fill="var(--oxide-deep)">TODAY</text>
             </g>
           )}
 

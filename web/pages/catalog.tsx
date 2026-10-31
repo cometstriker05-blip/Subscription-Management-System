@@ -4,7 +4,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { post, put } from '../lib/api';
 import { bp, date, money, moneyWhole, number, paiseToRupees, periodWord, rupeesToPaise } from '../lib/format';
 import { useMe } from '../shell';
-import { Button, Dialog, ErrorNote, Field, Loading, PageHead, Status, Table, Toggle, fieldErrors, useAction, useGet, useTitle } from '../ui';
+import { Button, Dialog, ErrorNote, Field, Loading, PageHead, Table, Toggle, fieldErrors, useAction, useGet, useTitle } from '../ui';
 
 const TABS = [['products', 'Products'], ['plans', 'Plans'], ['discounts', 'Discounts'], ['taxes', 'Tax rules'], ['templates', 'Quotation templates'], ['team', 'Team']];
 
@@ -429,7 +429,7 @@ function Team() {
           columns={[
             { label: 'Name', render: (u: any) => <span className="strong">{u.name}</span> },
             { label: 'Email', render: (u: any) => u.email },
-            { label: 'Role', render: (u: any) => <Status value={u.role === 'admin' ? 'active' : 'open'} /> },
+            { label: 'Role', render: (u: any) => <span className={`badge ${u.role === 'admin' ? 'ink' : 'sea'}`}>{u.role === 'admin' ? 'Admin' : 'Staff'}</span> },
             { label: 'Last sign-in', render: (u: any) => (u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('en-IN') : 'Never') },
             { label: 'Can sign in', render: (u: any) => (u.role === 'staff' ? <Toggle checked={u.active} label={`${u.name} can sign in`} onChange={(active) => setActive.mutate({ id: u.id, active })} /> : '—') },
           ]}

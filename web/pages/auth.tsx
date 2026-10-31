@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, post } from '../lib/api';
 import { INDIAN_STATES } from '../lib/format';
-import { KeelMark, useMe } from '../shell';
+import { useMe } from '../shell';
 import { Button, Field, useTitle } from '../ui';
 
 const RULES: [string, (p: string) => boolean][] = [
@@ -103,14 +103,14 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' | 'forgot' | '
   return (
     <div className="auth">
       <section className="auth-side">
-        <div className="row"><KeelMark size={30} /><strong style={{ fontSize: 22, color: '#fff' }}>Keel</strong></div>
-        <div>
+        <div className="auth-top">
+          <div className="auth-word">Keel</div>
           <h1>A billing day you can rehearse.</h1>
-          <p className="mt-16" style={{ color: '#b9d0dc', maxWidth: '44ch', fontSize: 15 }}>
-            Keel runs Brightloop's plans, subscriptions, invoices and revenue in one place. See billing day before it happens, prove nothing was billed twice, and explain every rupee.
-          </p>
         </div>
-        <p className="small" style={{ color: '#8fb0c1' }}>The keel is the backbone of a ship. Built in Kochi.</p>
+        <div className="auth-line" />
+        <div className="auth-bottom">
+          <p>Keel runs Brightloop's plans, subscriptions, invoices and revenue in one place. See billing day before it happens, prove nothing was billed twice, and explain every rupee.</p>
+        </div>
       </section>
 
       <section className="auth-form">
@@ -170,9 +170,9 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' | 'forgot' | '
             </div>
             <div className="mt-20">
               <div className="small strong">Try a role</div>
-              <div className="grid three mt-8" style={{ gap: 8 }}>
+              <div className="grid three mt-8">
                 {DEMO.map((d) => (
-                  <button key={d.label} className="card pad" style={{ textAlign: 'left', cursor: 'pointer', padding: 10 }} onClick={() => signInAs(d.email, d.password)}>
+                  <button key={d.label} className="role-pick" onClick={() => signInAs(d.email, d.password)}>
                     <div className="strong">{d.label}</div>
                     <div className="tiny muted">{d.detail}</div>
                   </button>
